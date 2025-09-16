@@ -34,13 +34,13 @@ jobs:
       - name: Build dependencies for Android ARM64 with Toolchain
         run: |
           cd depends
-          make HOST=aarch64-linux-android -j$(nproc) CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake CMAKE_ANDROID_API=21 # <-- THE FIX IS HERE!
+          make HOST=aarch64-linux-android -j$(nproc) CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake CMAKE_ANDROID_API=21
 
-      # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
+      # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना (GUI के बिना)
       - name: Configure and build Bitcoin Core
         run: |
           ./autogen.sh
-          ./configure --prefix=`pwd`/depends/aarch64-linux-android --enable-wallet --disable-tests --disable-bench --disable-gui --enable-util-cli
+          ./configure --prefix=`pwd`/depends/aarch64-linux-android --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli # <-- THE FIX IS HERE!
           make -j$(nproc)
 
       # स्टेप 5: परिणामी फाइलों को इकट्ठा करना
