@@ -28,17 +28,18 @@ jobs:
           echo "ANDROID_NDK_HOME=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
           echo "$(pwd)/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
-      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (GUI के बिना)
-      - name: Build dependencies for Android ARM64 (GUI Disabled)
+      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (टूलचेन और NO_GUI दोनों के साथ)
+      - name: Build dependencies for Android ARM64
         run: |
           cd depends
-          make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1
+          # यहाँ हम दोनों समाधानों को मिला रहे हैं
+          make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1 CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake CMAKE_ANDROID_API=21
 
       # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
       - name: Configure and build Bitcoin Core
         run: |
           ./autogen.sh
-          # CONFIG_SITE एक ट्रिक है जो configure स्क्रिप्ट को हमारी सेटिंग्स मानने के लिए मजबूर करती है
+          # CONFIG_SITE का उपयोग करना अभी भी एक अच्छी और मज़बूत प्रैक्टिस है
           CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure --prefix=/ --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
           make -j$(nproc)
 
@@ -46,7 +47,7 @@ jobs:
       - name: Prepare artifacts for upload
         run: |
           mkdir -p release/bin
-          # महत्वपूर्ण: अब फाइलें src/.libs/ फोल्डर में बनेंगी
+          # पाथ को src/.libs/ पर रखना सुरक्षित है
           cp src/.libs/bitcoind release/bin/
           cp src/.libs/bitcoin-cli release/bin/
 
