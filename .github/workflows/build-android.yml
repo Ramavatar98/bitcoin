@@ -1,7 +1,7 @@
 # इस वर्कफ़लो फ़ाइल का नाम
 name: Build Bitcoin Core for Android (ARM64)
 
-# यह वर्कफ़लो कब चलेगा?
+# यह वर्कफ़्लो कब चलेगा?
 on:
   push:
     branches: [ "master" ]
@@ -10,7 +10,6 @@ on:
 # वर्कफ़लो में किए जाने वाले काम (Jobs)
 jobs:
   build:
-    # हम एक स्थिर OS का उपयोग कर रहे हैं, जो एक अच्छी आदत है
     runs-on: ubuntu-22.04
 
     steps:
@@ -18,23 +17,23 @@ jobs:
       - name: Checkout Bitcoin Core source code
         uses: actions/checkout@v4
 
-      # स्टेप 2: ज़रूरी *नेटिव* निर्भरताओं को इंस्टॉल करना
+      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना और PATH सेट करना
       - name: Install native build dependencies and Android NDK
         run: |
           sudo apt-get update
-          # ध्यान दें: यहाँ कोई ':arm64' पैकेज नहीं है
           sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake wget unzip
           
           # Android NDK डाउनलोड करना
           wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
           unzip -q android-ndk-r21e-linux-x86_64.zip
+          
+          # NDK के टूलचेन पाथ को GITHUB_PATH में जोड़ना (यह सबसे विश्वसनीय तरीका है)
+          echo "$(pwd)/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+          # ANDROID_NDK_HOME को GITHUB_ENV में सेट करना
+          echo "ANDROID_NDK_HOME=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
 
-      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (सही एनवायरनमेंट के साथ)
+      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना
       - name: Build Bitcoin Depends for Android
-        env:
-          # इस स्टेप के लिए एनवायरनमेंट वेरिएबल्स को स्पष्ट रूप से सेट करना
-          ANDROID_NDK_HOME: ${{ github.workspace }}/android-ndk-r21e
-          PATH: ${{ github.workspace }}/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin:${{ env.PATH }}
         run: |
           cd depends
           make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1
@@ -43,7 +42,6 @@ jobs:
       - name: Configure and build Bitcoin Core
         run: |
           ./autogen.sh
-          # CONFIG_SITE का उपयोग करना सबसे मज़बूत तरीका है
           CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure --prefix=/ --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
           make -j$(nproc)
 
