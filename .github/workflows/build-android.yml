@@ -16,52 +16,39 @@ jobs:
       - name: Checkout Bitcoin Core source code
         uses: actions/checkout@v4
 
-      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना
-      - name: Install build dependencies and Android NDK
+      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना (अब Android क्रॉस-कंपाइल पैकेज के साथ)
+      - name: Install build dependencies and Cross-Compilation tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake wget unzip
-          
-          wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
-          unzip -q android-ndk-r21e-linux-x86_64.zip
-          
-          echo "ANDROID_NDK_HOME=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
-          export ANDROID_NDK_HOME=$(pwd)/android-ndk-r21e
-          
-          # टूलचेन के पाथ को एक्सपोर्ट करना
-          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          # हम Android के लिए क्रॉस-कंपाइलिंग टूलचेन और ज़रूरी लाइब्रेरी इंस्टॉल कर रहे हैं
+          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake \
+          g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+          libboost-system-dev:arm64 libboost-filesystem-dev:arm64 libboost-test-dev:arm64 libboost-thread-dev:arm64 \
+          libevent-dev:arm64 libsqlite3-dev:arm64
 
-      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (NO_GUI के साथ)
-      - name: Build dependencies for Android ARM64
-        run: |
-          cd depends
-          make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1
-
-      # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
+      # स्टेप 3: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना (depends के बिना)
       - name: Configure and build Bitcoin Core
         env:
-          # यहाँ हम configure को चलाने के लिए सभी ज़रूरी एनवायरनमेंट वेरिएबल्स को स्पष्ट रूप से सेट कर रहे हैं
-          PATH: ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin:${{ env.PATH }}
-          CC: aarch64-linux-android21-clang
-          CXX: aarch64-linux-android21-clang++
-          AR: aarch64-linux-android-ar
-          RANLIB: aarch64-linux-android-ranlib
-          STRIP: aarch64-linux-android-strip
+          # क्रॉस-कंपाइलिंग के लिए एनवायरनमेंट वेरिएबल्स सेट करना
+          CC: aarch64-linux-gnu-gcc
+          CXX: aarch64-linux-gnu-g++
+          AR: aarch64-linux-gnu-ar
+          RANLIB: aarch64-linux-gnu-ranlib
+          STRIP: aarch64-linux-gnu-strip
         run: |
           ./autogen.sh
-          # --host फ्लैग स्पष्ट रूप से टारगेट आर्किटेक्चर को बताता है
-          ./configure --prefix=$PWD/depends/aarch64-linux-android --host=aarch64-linux-android --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
+          # अब हम configure को बता रहे हैं कि उसे सिस्टम में इंस्टॉल की गई लाइब्रेरी का उपयोग करना है
+          ./configure --host=aarch64-linux-gnu --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli --with-boost-libdir=/usr/lib/aarch64-linux-gnu
           make -j$(nproc)
 
-      # स्टेप 5: परिणामी फाइलों को इकट्ठा करना
+      # स्टेप 4: परिणामी फाइलों को इकट्ठा करना
       - name: Prepare artifacts for upload
         run: |
           mkdir -p release/bin
-          # पाथ को src/.libs/ पर रखना सुरक्षित है
           cp src/.libs/bitcoind release/bin/
           cp src/.libs/bitcoin-cli release/bin/
 
-      # स्टेप 6: बनी हुई फाइलों को अपलोड करना
+      # स्टेप 5: बनी हुई फाइलों को अपलोड करना
       - name: Upload compiled binaries as an artifact
         uses: actions/upload-artifact@v4
         with:
