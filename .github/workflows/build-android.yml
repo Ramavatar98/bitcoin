@@ -1,7 +1,7 @@
 # इस वर्कफ़लो फ़ाइल का नाम
 name: Build Bitcoin Core for Android (ARM64)
 
-# यह वर्कफ़्लो कब चलेगा?
+# यह वर्कफ़लो कब चलेगा?
 on:
   push:
     branches: [ "master" ]
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout Bitcoin Core source code
         uses: actions/checkout@v4
 
-      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना और PATH सेट करना
+      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना
       - name: Install native build dependencies and Android NDK
         run: |
           sudo apt-get update
@@ -27,16 +27,26 @@ jobs:
           wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
           unzip -q android-ndk-r21e-linux-x86_64.zip
           
-          # NDK के टूलचेन पाथ को GITHUB_PATH में जोड़ना (यह सबसे विश्वसनीय तरीका है)
-          echo "$(pwd)/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
-          # ANDROID_NDK_HOME को GITHUB_ENV में सेट करना
-          echo "ANDROID_NDK_HOME=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
+          # NDK का पाथ एक वेरिएबल में सेट करना
+          echo "NDK_PATH=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
 
-      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना
+      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (कंपाइलर का पूरा पाथ देकर)
       - name: Build Bitcoin Depends for Android
         run: |
           cd depends
-          make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1
+          
+          # कंपाइलर का पूरा पाथ परिभाषित करना
+          TOOLCHAIN_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          C_COMPILER="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang"
+          CXX_COMPILER="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang++"
+
+          # make कमांड को स्पष्ट कंपाइलर पाथ के साथ चलाना
+          make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1 \
+            CC="${C_COMPILER}" \
+            CXX="${CXX_COMPILER}" \
+            AR="${TOOLCHAIN_PATH}/aarch64-linux-android-ar" \
+            RANLIB="${TOOLCHAIN_PATH}/aarch64-linux-android-ranlib" \
+            STRIP="${TOOLCHAIN_PATH}/aarch64-linux-android-strip"
 
       # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
       - name: Configure and build Bitcoin Core
