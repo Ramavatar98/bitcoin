@@ -1,16 +1,18 @@
 # इस वर्कफ़लो फ़ाइल का नाम
 name: Build Bitcoin Core for Android (ARM64)
 
-# यह वर्कफ़लो कब चलेगा?
+# यह वर्कफ़्लो कब चलेगा?
 on:
   push:
     branches: [ "master" ]
   workflow_dispatch:
 
-# वर्कफ़लो में किए जाने वाले काम (Jobs)
+# वर्कफ़्लो में किए जाने वाले काम (Jobs)
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # हम एक स्थिर और संगत Ubuntu संस्करण का उपयोग कर रहे हैं
+    runs-on: ubuntu-22.04 # <-- THE FIX IS HERE!
+
     steps:
       # स्टेप 1: सोर्स कोड को डाउनलोड करना
       - name: Checkout Bitcoin Core source code
@@ -23,7 +25,7 @@ jobs:
           sudo dpkg --add-architecture arm64
           sudo apt-get update
           
-          # अब arm64 पैकेज इंस्टॉल करना
+          # अब arm64 पैकेज इंस्टॉल करना (यह ubuntu-22.04 पर काम करेगा)
           sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake \
           g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
           libboost-system-dev:arm64 libboost-filesystem-dev:arm64 libboost-test-dev:arm64 libboost-thread-dev:arm64 \
