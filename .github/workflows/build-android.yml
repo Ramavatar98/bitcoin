@@ -22,11 +22,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake
           
-          # Android NDK डाउनलोड करना
           wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
           unzip -q android-ndk-r21e-linux-x86_64.zip
           
-          # NDK के पाथ को सही ढंग से सेट करना
           echo "ANDROID_NDK_HOME=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
           echo "$(pwd)/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
@@ -34,21 +32,23 @@ jobs:
       - name: Build dependencies for Android ARM64 (GUI Disabled)
         run: |
           cd depends
-          make HOST=aarch64-linux-android -j$(nproc) CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake CMAKE_ANDROID_API=21 NO_GUI=1 # <-- THE FIX IS HERE!
+          make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1
 
       # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
       - name: Configure and build Bitcoin Core
         run: |
           ./autogen.sh
-          ./configure --prefix=`pwd`/depends/aarch64-linux-android --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
+          # CONFIG_SITE एक ट्रिक है जो configure स्क्रिप्ट को हमारी सेटिंग्स मानने के लिए मजबूर करती है
+          CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure --prefix=/ --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
           make -j$(nproc)
 
       # स्टेप 5: परिणामी फाइलों को इकट्ठा करना
       - name: Prepare artifacts for upload
         run: |
           mkdir -p release/bin
-          cp src/bitcoind release/bin/
-          cp src/bitcoin-cli release/bin/
+          # महत्वपूर्ण: अब फाइलें src/.libs/ फोल्डर में बनेंगी
+          cp src/.libs/bitcoind release/bin/
+          cp src/.libs/bitcoin-cli release/bin/
 
       # स्टेप 6: बनी हुई फाइलों को अपलोड करना
       - name: Upload compiled binaries as an artifact
