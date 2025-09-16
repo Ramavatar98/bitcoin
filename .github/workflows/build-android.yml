@@ -16,29 +16,33 @@ jobs:
       - name: Checkout Bitcoin Core source code
         uses: actions/checkout@v4
 
-      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना (अब Android क्रॉस-कंपाइल पैकेज के साथ)
+      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना (मल्टी-आर्च सक्षम करके)
       - name: Install build dependencies and Cross-Compilation tools
         run: |
+          # Multi-arch support को सक्षम करना
+          sudo dpkg --add-architecture arm64
           sudo apt-get update
-          # हम Android के लिए क्रॉस-कंपाइलिंग टूलचेन और ज़रूरी लाइब्रेरी इंस्टॉल कर रहे हैं
+          
+          # अब arm64 पैकेज इंस्टॉल करना
           sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake \
           g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
           libboost-system-dev:arm64 libboost-filesystem-dev:arm64 libboost-test-dev:arm64 libboost-thread-dev:arm64 \
           libevent-dev:arm64 libsqlite3-dev:arm64
 
-      # स्टेप 3: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना (depends के बिना)
+      # स्टेप 3: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
       - name: Configure and build Bitcoin Core
         env:
-          # क्रॉस-कंपाइलिंग के लिए एनवायरनमेंट वेरिएबल्स सेट करना
-          CC: aarch64-linux-gnu-gcc
-          CXX: aarch64-linux-gnu-g++
-          AR: aarch64-linux-gnu-ar
-          RANLIB: aarch64-linux-gnu-ranlib
-          STRIP: aarch64-linux-gnu-strip
+          # pkg-config को बताना कि arm64 लाइब्रेरी कहाँ ढूंढनी है
+          PKG_CONFIG_PATH: /usr/lib/aarch64-linux-gnu/pkgconfig
         run: |
           ./autogen.sh
-          # अब हम configure को बता रहे हैं कि उसे सिस्टम में इंस्टॉल की गई लाइब्रेरी का उपयोग करना है
-          ./configure --host=aarch64-linux-gnu --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli --with-boost-libdir=/usr/lib/aarch64-linux-gnu
+          # configure को क्रॉस-कंपाइलिंग के लिए सेट करना
+          ./configure --host=aarch64-linux-gnu --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli \
+          CC=aarch64-linux-gnu-gcc \
+          CXX=aarch64-linux-gnu-g++ \
+          AR=aarch64-linux-gnu-ar \
+          RANLIB=aarch64-linux-gnu-ranlib \
+          STRIP=aarch64-linux-gnu-strip
           make -j$(nproc)
 
       # स्टेप 4: परिणामी फाइलों को इकट्ठा करना
