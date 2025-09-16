@@ -1,0 +1,76 @@
+# इस वर्कफ़्लो फ़ाइल का नाम
+name: Build Bitcoin Core for Android (ARM64)
+
+# यह वर्कफ़्लो कब चलेगा?
+on:
+  # 1. जब 'master' ब्रांच में कोई नया कोड पुश किया जाए
+  push:
+    branches: [ "master" ]
+  # 2. मैन्युअल रूप से चलाने के लिए (Actions टैब में 'Run workflow' बटन से)
+  workflow_dispatch:
+
+# वर्कफ़्लो में किए जाने वाले काम (Jobs)
+jobs:
+  # हमारे काम का नाम 'build' है
+  build:
+    # यह किस ऑपरेटिंग सिस्टम पर चलेगा? हम Ubuntu का नवीनतम संस्करण उपयोग कर रहे हैं।
+    runs-on: ubuntu-latest
+
+    # काम के स्टेप्स (चरण)
+    steps:
+      # स्टेप 1: अपने रिपॉजिटरी से सोर्स कोड को डाउनलोड करना
+      - name: Checkout Bitcoin Core source code
+        uses: actions/checkout@v3
+
+      # स्टेप 2: ज़रूरी निर्भरताओं (dependencies) को इंस्टॉल करना
+      # इसमें बिल्ड टूल्स, लाइब्रेरी और Android NDK शामिल हैं।
+      - name: Install build dependencies and Android NDK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache
+          
+          # Android NDK (Native Development Kit) को डाउनलोड और एक्सट्रेक्ट करना
+          # हम एक विशिष्ट, परखे हुए संस्करण का उपयोग कर रहे हैं ताकि संगतता बनी रहे।
+          wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip -q android-ndk-r21e-linux-x86_64.zip
+          
+          # NDK के पाथ को एनवायरनमेंट वेरिएबल में सेट करना ताकि बिल्ड सिस्टम उसे ढूंढ सके।
+          echo "ANDROID_NDK_HOME=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
+          echo "$(pwd)/android-ndk-r21e" >> $GITHUB_PATH
+
+      # स्टेप 3: बिटकॉइन की निर्भरताओं (depends) को बनाना
+      # यह बिटकॉइन के बिल्ड सिस्टम का एक हिस्सा है जो क्रॉस-कंपाइलिंग के लिए सभी ज़रूरी लाइब्रेरी बनाता है।
+      - name: Build dependencies for Android ARM64
+        # हम ccache का उपयोग कर रहे हैं ताकि भविष्य के बिल्ड तेज़ हो सकें।
+        run: |
+          cd depends
+          make HOST=aarch64-linux-android -j$(nproc)
+
+      # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
+      # अब हम मुख्य प्रोग्राम (bitcoind, bitcoin-cli) को कंपाइल करेंगे।
+      - name: Configure and build Bitcoin Core
+        # कॉन्फ़िगरेशन स्क्रिप्ट को ज़रूरी फ्लैग्स के साथ चलाना
+        run: |
+          ./autogen.sh
+          ./configure --prefix=`pwd`/depends/aarch64-linux-android --disable-wallet --disable-tests --disable-bench --disable-gui --enable-util-cli
+          make -j$(nproc)
+
+      # स्टेप 5: परिणामी फाइलों को एक फोल्डर में इकट्ठा करना
+      # हम सिर्फ उन दो फाइलों को लेंगे जिनकी हमें ज़रूरत है।
+      - name: Prepare artifacts for upload
+        run: |
+          mkdir -p release/bin
+          # src/ फोल्डर से bitcoind को कॉपी करना
+          cp src/bitcoind release/bin/
+          # src/ फोल्डर से bitcoin-cli को कॉपी करना
+          cp src/bitcoin-cli release/bin/
+
+      # स्टेप 6: बनी हुई फाइलों को एक आर्टिफैक्ट के रूप में अपलोड करना
+      # यह एक ज़िप फ़ाइल बनाएगा जिसे आप वर्कफ़्लो पूरा होने के बाद डाउनलोड कर सकते हैं।
+      - name: Upload compiled binaries as an artifact
+        uses: actions/upload-artifact@v3
+        with:
+          # आर्टिफैक्ट का नाम
+          name: bitcoin-android-arm64
+          # किस फोल्डर को अपलोड करना है
+          path: release/
