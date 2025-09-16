@@ -1,7 +1,7 @@
 # इस वर्कफ़लो फ़ाइल का नाम
 name: Build Bitcoin Core for Android (ARM64)
 
-# यह वर्कफ़्लो कब चलेगा?
+# यह वर्कफ़लो कब चलेगा?
 on:
   push:
     branches: [ "master" ]
@@ -31,27 +31,27 @@ jobs:
           unzip -q commandlinetools-linux-7583922_latest.zip -d android_sdk
           
           # SDK मैनेजर का उपयोग करके ज़रूरी SDK पैकेज इंस्टॉल करना
-          # 'yes' कमांड लाइसेंस समझौतों को स्वचालित रूप से स्वीकार करता है
           yes | android_sdk/cmdline-tools/bin/sdkmanager --sdk_root=$(pwd)/android_sdk "platforms;android-21" "build-tools;30.0.3"
           
-          # पाथ को सही ढंग से सेट करना
+          # पाथ को सेट करना (यह अभी भी एक अच्छी प्रैक्टिस है)
           echo "ANDROID_NDK_HOME=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$(pwd)/android_sdk" >> $GITHUB_ENV
           echo "$(pwd)/android-ndk-r21e/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
-      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (GUI के साथ, क्योंकि यह मजबूर कर रहा है)
+      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (सभी CMake वेरिएबल्स के साथ)
       - name: Build dependencies for Android ARM64
         run: |
           cd depends
-          # हम NO_GUI=1 को हटा रहे हैं क्योंकि यह काम नहीं कर रहा है।
-          # अब जब SDK मौजूद है, तो Qt बिल्ड को सफल होना चाहिए।
-          make HOST=aarch64-linux-android -j$(nproc) CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake CMAKE_ANDROID_API=21
+          # हम make को सीधे बता रहे हैं कि CMake को कौन से वेरिएबल पास करने हैं।
+          make HOST=aarch64-linux-android -j$(nproc) \
+            CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake \
+            CMAKE_ANDROID_API=21 \
+            ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT} # <-- THE FIX IS HERE!
 
       # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
       - name: Configure and build Bitcoin Core
         run: |
           ./autogen.sh
-          # हम अभी भी --without-gui का उपयोग करेंगे ताकि हम bitcoin-qt को न बनाएँ, सिर्फ उसकी निर्भरता को बनाएँ।
           CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure --prefix=/ --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
           make -j$(nproc)
 
