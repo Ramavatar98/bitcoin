@@ -1,0 +1,52 @@
+# इस वर्कफ़्लो फ़ाइल का नाम
+name: Build Bitcoin Core for Linux (ARM64)
+
+# यह वर्कफ़्लो कब चलेगा?
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+# वर्कफ़लो में किए जाने वाले काम (Jobs)
+jobs:
+  build-arm64:
+    # हम एक ARM64 आर्किटेक्चर वाले रनर का उपयोग कर रहे हैं
+    # नोट: GitHub के नेटिव ARM रनर अभी भी सीमित हो सकते हैं, इसलिए हम एक विश्वसनीय थर्ड-पार्टी एक्शन का उपयोग कर सकते हैं
+    runs-on: ubuntu-latest
+    
+    steps:
+      # स्टेप 1: QEMU सेट अप करना (x86 रनर को ARM कोड चलाने की अनुमति देने के लिए)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # स्टेप 2: ARM64 बिल्ड वातावरण बनाना (Docker का उपयोग करके)
+      - name: Build in ARM64 container
+        run: |
+          # हम एक ARM64 Ubuntu Docker कंटेनर के अंदर सभी कमांड चलाएंगे
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace arm64v8/ubuntu:22.04 /bin/bash -c '
+            # --- अब हम ARM64 कंटेनर के अंदर हैं ---
+
+            # 1. निर्भरताएँ इंस्टॉल करना
+            apt-get update
+            apt-get install -y build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev libboost-system-dev libboost-filesystem-dev libboost-test-dev libboost-thread-dev libsqlite3-dev git
+
+            # 2. सोर्स कोड पहले से ही माउंटेड है, इसलिए हम सीधे बिल्ड करते हैं
+            ./autogen.sh
+            ./configure --without-gui --enable-wallet --disable-tests --disable-bench
+            make -j$(nproc)
+
+            # 3. परिणामी फाइलों को एक विशेष फोल्डर में डालना
+            mkdir -p /workspace/release_arm64/bin
+            cp src/bitcoind /workspace/release_arm64/bin/
+            cp src/bitcoin-cli /workspace/release_arm64/bin/
+            
+            echo "Build finished successfully!"
+            # --- कंटेनर से बाहर निकलें ---
+          '
+      
+      # स्टेप 3: बनी हुई फाइलों को एक आर्टिफैक्ट के रूप में अपलोड करना
+      - name: Upload compiled ARM64 binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-linux-arm64
+          path: release_arm64/
