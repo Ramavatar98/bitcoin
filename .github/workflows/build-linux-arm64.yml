@@ -10,70 +10,55 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # स्टेप 1: सोर्स कोड को डाउनलोड करना
-      - name: Checkout Bitcoin Core source code
+      # Step 1: Checkout source code
+      - name: Checkout Bitcoin Core source
         uses: actions/checkout@v4
 
-      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना और नया NDK डाउनलोड करना
-      - name: Install native build dependencies and Android NDK
+      # Step 2: Install dependencies & Android NDK
+      - name: Install dependencies & Android NDK
         run: |
-          apt-get update
-          apt-get install -y build-essential libtool autotools-dev automake pkg-config \
-                             bsdmainutils python3 curl git ca-certificates ccache cmake wget unzip ninja-build
-          
-          # ✅ नया NDK r26c (C++20 सपोर्ट वाला)
-          NDK_VERSION=r26c
-          wget https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
-          unzip -q android-ndk-${NDK_VERSION}-linux.zip
-          
-          echo "NDK_PATH=$(pwd)/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
+          sudo apt-get update
+          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake wget unzip
 
-      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (CMake फ्लैग्स और sysroot के साथ)
-      - name: Build Bitcoin Depends for Android
+          wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip -q android-ndk-r21e-linux-x86_64.zip
+          echo "NDK_PATH=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
+
+      # Step 3: Build Bitcoin depends for Android
+      - name: Build depends
         run: |
           cd depends
-          
           TOOLCHAIN_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          SYSROOT_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-
-          echo "Using Toolchain: $TOOLCHAIN_PATH"
-          echo "Using Sysroot: $SYSROOT_PATH"
-
           make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1 \
             CC="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang" \
             CXX="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang++" \
             AR="${TOOLCHAIN_PATH}/aarch64-linux-android-ar" \
             RANLIB="${TOOLCHAIN_PATH}/aarch64-linux-android-ranlib" \
             STRIP="${TOOLCHAIN_PATH}/aarch64-linux-android-strip" \
-            CMAKE_FLAGS="-DCMAKE_SYSROOT=${SYSROOT_PATH} \
-                         -DCMAKE_C_COMPILER=${TOOLCHAIN_PATH}/aarch64-linux-android21-clang \
-                         -DCMAKE_CXX_COMPILER=${TOOLCHAIN_PATH}/aarch64-linux-android21-clang++ \
-                         -DCMAKE_CXX_STANDARD=17"
+            CMAKE_FLAGS="-DCMAKE_CXX_STANDARD=17"
 
-      # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
-      - name: Configure and build Bitcoin Core
+      # Step 4: Configure & Build Bitcoin Core
+      - name: Configure & Build Bitcoin Core
         run: |
           ./autogen.sh
           CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure \
-            --prefix=/ \
-            --enable-wallet \
-            --disable-tests \
-            --disable-bench \
-            --without-gui \
-            --enable-util-cli
+            --prefix=/ --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
           make -j$(nproc)
 
-      # स्टेप 5: परिणामी फाइलों को इकट्ठा करना
-      - name: Prepare artifacts for upload
+      # Step 5: Collect binaries
+      - name: Prepare binaries
         run: |
           mkdir -p release/bin
           cp src/.libs/bitcoind release/bin/
           cp src/.libs/bitcoin-cli release/bin/
+          cp src/.libs/bitcoin-tx release/bin/
+          cp src/.libs/bitcoin-util release/bin/
+          tar -czvf bitcoin-android-arm64.tar.gz -C release .
 
-      # स्टेप 6: बनी हुई फाइलों को अपलोड करना
-      - name: Upload compiled binaries as an artifact
+      # Step 6: Upload artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: bitcoin-android-arm64
-          path: release/
+          path: bitcoin-android-arm64.tar.gz
           
