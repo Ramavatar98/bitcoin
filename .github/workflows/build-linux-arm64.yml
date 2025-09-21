@@ -10,7 +10,6 @@ on:
 # वर्कफ़लो में किए जाने वाले काम (Jobs)
 jobs:
   build:
-    # हम एक स्थिर OS का उपयोग कर रहे हैं
     runs-on: ubuntu-22.04
 
     steps:
@@ -18,44 +17,37 @@ jobs:
       - name: Checkout Bitcoin Core source code
         uses: actions/checkout@v4
 
-      # स्टेप 2: ज़रूरी *नेटिव* निर्भरताओं को इंस्टॉल करना
+      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना
       - name: Install native build dependencies and Android NDK
         run: |
           sudo apt-get update
-          # ध्यान दें: यहाँ कोई ':arm64' पैकेज नहीं है
           sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake wget unzip
           
-          # Android NDK डाउनलोड करना
           wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
           unzip -q android-ndk-r21e-linux-x86_64.zip
           
-          # NDK का पाथ एक एनवायरनमेंट फाइल में सेट करना
           echo "NDK_PATH=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
 
-      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (कंपाइलर का पूरा पाथ देकर)
+      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (CMake फ्लैग्स के साथ)
       - name: Build Bitcoin Depends for Android
         run: |
           cd depends
           
-          # कंपाइलर का पूरा पाथ परिभाषित करना
           TOOLCHAIN_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin"
           
-          # CXXFLAGS में C++17 मानक को स्पष्ट रूप से सेट करना
-          export CXXFLAGS="-std=c++17"
-
-          # make कमांड को स्पष्ट कंपाइलर पाथ और फ्लैग्स के साथ चलाना
+          # हम make को एक अतिरिक्त CMAKE_FLAGS पैरामीटर दे रहे हैं
           make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1 \
             CC="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang" \
             CXX="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang++" \
             AR="${TOOLCHAIN_PATH}/aarch64-linux-android-ar" \
             RANLIB="${TOOLCHAIN_PATH}/aarch64-linux-android-ranlib" \
-            STRIP="${TOOLCHAIN_PATH}/aarch64-linux-android-strip"
+            STRIP="${TOOLCHAIN_PATH}/aarch64-linux-android-strip" \
+            CMAKE_FLAGS="-DCMAKE_CXX_STANDARD=17" # <-- THE FIX IS HERE!
 
       # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
       - name: Configure and build Bitcoin Core
         run: |
           ./autogen.sh
-          # CONFIG_SITE का उपयोग करना सबसे मज़बूत तरीका है
           CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure --prefix=/ --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
           make -j$(nproc)
 
