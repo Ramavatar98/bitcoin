@@ -1,7 +1,7 @@
 # इस वर्कफ़लो फ़ाइल का नाम
-name: Build Bitcoin Core for Linux (ARM64)
+name: Build Bitcoin Core for Android (ARM64)
 
-# यह वर्कफ़्लो कब चलेगा?
+# यह वर्कफ़लो कब चलेगा?
 on:
   push:
     branches: [ "master" ]
@@ -9,8 +9,8 @@ on:
 
 # वर्कफ़लो में किए जाने वाले काम (Jobs)
 jobs:
-  build-arm64:
-    # हम एक स्थिर और संगत Ubuntu संस्करण का उपयोग कर रहे हैं
+  build:
+    # हम एक स्थिर OS का उपयोग कर रहे हैं
     runs-on: ubuntu-22.04
 
     steps:
@@ -18,51 +18,57 @@ jobs:
       - name: Checkout Bitcoin Core source code
         uses: actions/checkout@v4
 
-      # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना (मल्टी-आर्च सक्षम करके)
-      - name: Install build dependencies and Cross-Compilation tools
+      # स्टेप 2: ज़रूरी *नेटिव* निर्भरताओं को इंस्टॉल करना
+      - name: Install native build dependencies and Android NDK
         run: |
-          # Multi-arch support को सक्षम करना
-          sudo dpkg --add-architecture arm64
           sudo apt-get update
+          # ध्यान दें: यहाँ कोई ':arm64' पैकेज नहीं है
+          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake wget unzip
           
-          # अब arm64 पैकेज इंस्टॉल करना
-          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake \
-          g++-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-          libboost-system-dev:arm64 libboost-filesystem-dev:arm64 libboost-test-dev:arm64 libboost-thread-dev:arm64 \
-          libevent-dev:arm64 libsqlite3-dev:arm64
+          # Android NDK डाउनलोड करना
+          wget https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip -q android-ndk-r21e-linux-x86_64.zip
+          
+          # NDK का पाथ एक एनवायरनमेंट फाइल में सेट करना
+          echo "NDK_PATH=$(pwd)/android-ndk-r21e" >> $GITHUB_ENV
 
-      # स्टेप 3: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
-      - name: Configure and build Bitcoin Core
-        env:
-          # pkg-config को बताना कि arm64 लाइब्रेरी कहाँ ढूंढनी है
-          PKG_CONFIG_PATH: /usr/lib/aarch64-linux-gnu/pkgconfig
+      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (कंपाइलर का पूरा पाथ देकर)
+      - name: Build Bitcoin Depends for Android
         run: |
-          # यह सुनिश्चित करना कि हम सही डायरेक्टरी में हैं (हालांकि यह डिफ़ॉल्ट होना चाहिए)
-          pwd
-          ls -la
+          cd depends
           
+          # कंपाइलर का पूरा पाथ परिभाषित करना
+          TOOLCHAIN_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          
+          # CXXFLAGS में C++17 मानक को स्पष्ट रूप से सेट करना
+          export CXXFLAGS="-std=c++17"
+
+          # make कमांड को स्पष्ट कंपाइलर पाथ और फ्लैग्स के साथ चलाना
+          make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1 \
+            CC="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang" \
+            CXX="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang++" \
+            AR="${TOOLCHAIN_PATH}/aarch64-linux-android-ar" \
+            RANLIB="${TOOLCHAIN_PATH}/aarch64-linux-android-ranlib" \
+            STRIP="${TOOLCHAIN_PATH}/aarch64-linux-android-strip"
+
+      # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
+      - name: Configure and build Bitcoin Core
+        run: |
           ./autogen.sh
-          
-          # configure को क्रॉस-कंपाइलिंग के लिए सेट करना
-          ./configure --host=aarch64-linux-gnu --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli \
-          CC=aarch64-linux-gnu-gcc \
-          CXX=aarch64-linux-gnu-g++ \
-          AR=aarch64-linux-gnu-ar \
-          RANLIB=aarch64-linux-gnu-ranlib \
-          STRIP=aarch64-linux-gnu-strip
-          
+          # CONFIG_SITE का उपयोग करना सबसे मज़बूत तरीका है
+          CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure --prefix=/ --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
           make -j$(nproc)
 
-      # स्टेप 4: परिणामी फाइलों को इकट्ठा करना
+      # स्टेप 5: परिणामी फाइलों को इकट्ठा करना
       - name: Prepare artifacts for upload
         run: |
           mkdir -p release/bin
           cp src/.libs/bitcoind release/bin/
           cp src/.libs/bitcoin-cli release/bin/
 
-      # स्टेप 5: बनी हुई फाइलों को अपलोड करना
+      # स्टेप 6: बनी हुई फाइलों को अपलोड करना
       - name: Upload compiled binaries as an artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bitcoin-linux-arm64
+          name: bitcoin-android-arm64
           path: release/
