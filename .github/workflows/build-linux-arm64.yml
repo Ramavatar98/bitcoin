@@ -17,36 +17,50 @@ jobs:
       # स्टेप 2: ज़रूरी निर्भरताओं को इंस्टॉल करना और नया NDK डाउनलोड करना
       - name: Install native build dependencies and Android NDK
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config bsdmainutils python3 curl git ca-certificates ccache cmake wget unzip
-
-          # 🔧 नया NDK r26c डाउनलोड करें (C++20 सपोर्ट वाला)
+          apt-get update
+          apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+                             bsdmainutils python3 curl git ca-certificates ccache cmake wget unzip ninja-build
+          
+          # ✅ नया NDK r26c (C++20 सपोर्ट वाला)
           NDK_VERSION=r26c
           wget https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
           
           echo "NDK_PATH=$(pwd)/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
 
-      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (CMake फ्लैग्स के साथ)
+      # स्टेप 3: बिटकॉइन की निर्भरताओं को बनाना (CMake फ्लैग्स और sysroot के साथ)
       - name: Build Bitcoin Depends for Android
         run: |
           cd depends
           
           TOOLCHAIN_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          
+          SYSROOT_PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+
+          echo "Using Toolchain: $TOOLCHAIN_PATH"
+          echo "Using Sysroot: $SYSROOT_PATH"
+
           make HOST=aarch64-linux-android -j$(nproc) NO_GUI=1 \
             CC="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang" \
             CXX="${TOOLCHAIN_PATH}/aarch64-linux-android21-clang++" \
             AR="${TOOLCHAIN_PATH}/aarch64-linux-android-ar" \
             RANLIB="${TOOLCHAIN_PATH}/aarch64-linux-android-ranlib" \
             STRIP="${TOOLCHAIN_PATH}/aarch64-linux-android-strip" \
-            CMAKE_FLAGS="-DCMAKE_CXX_STANDARD=17"
+            CMAKE_FLAGS="-DCMAKE_SYSROOT=${SYSROOT_PATH} \
+                         -DCMAKE_C_COMPILER=${TOOLCHAIN_PATH}/aarch64-linux-android21-clang \
+                         -DCMAKE_CXX_COMPILER=${TOOLCHAIN_PATH}/aarch64-linux-android21-clang++ \
+                         -DCMAKE_CXX_STANDARD=17"
 
       # स्टेप 4: बिटकॉइन कोर को कॉन्फ़िगर और कंपाइल करना
       - name: Configure and build Bitcoin Core
         run: |
           ./autogen.sh
-          CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure --prefix=/ --enable-wallet --disable-tests --disable-bench --without-gui --enable-util-cli
+          CONFIG_SITE=$PWD/depends/aarch64-linux-android/share/config.site ./configure \
+            --prefix=/ \
+            --enable-wallet \
+            --disable-tests \
+            --disable-bench \
+            --without-gui \
+            --enable-util-cli
           make -j$(nproc)
 
       # स्टेप 5: परिणामी फाइलों को इकट्ठा करना
